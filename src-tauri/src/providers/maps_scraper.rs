@@ -88,15 +88,38 @@ pub fn parse_records(json: &str) -> Result<Vec<ScraperRecord>, String> {
     Err("JSON do scraper inválido — esperado array ou JSONL de negócios".into())
 }
 
-pub fn check_binary() -> Result<String, String> {
-    let out = std::process::Command::new("google-maps-scraper")
+/// Localiza o binário: primeiro no PATH, depois no backup
+/// `%LOCALAPPDATA%\LocalLead\bin\google-maps-scraper.exe`.
+pub fn resolve_binary() -> Result<String, String> {
+    let probe = std::process::Command::new("google-maps-scraper")
         .arg("--help")
         .output();
-    match out {
-        Ok(o) if o.status.success() => Ok("google-maps-scraper encontrado no PATH".into()),
-        Ok(o) => Err(format!("programa retornou {o} — reinstale o binário", o = o.status)),
-        Err(_) => Err("google-maps-scraper não encontrado no PATH — instale ou use Importar JSON".into()),
+    match probe {
+        Ok(o) if o.status.success() => return Ok("google-maps-scraper".into()),
+        Ok(o) => {
+            return Err(format!(
+                "programa respondeu {o} — reinstale o binário",
+                o = o.status
+            ))
+        }
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            return Err(format!("falha ao chamar o scraper: {e}"))
+        }
+        Err(_) => {}
     }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let p = std::path::PathBuf::from(format!(
+            "{local}\\LocalLead\\bin\\google-maps-scraper.exe"
+        ));
+        if p.is_file() {
+            return Ok(p.to_string_lossy().into_owned());
+        }
+    }
+    Err("google-maps-scraper não encontrado no PATH — instale ou use Importar JSON".into())
+}
+
+pub fn check_binary() -> Result<String, String> {
+    resolve_binary().map(|b| format!("scraper pronto ({b})"))
 }
 
 /// Monta os argumentos do subprocesso. Query vai no arquivo de entrada

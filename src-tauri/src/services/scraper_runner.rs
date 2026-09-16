@@ -67,9 +67,19 @@ pub async fn run_scraper_search(
         2,
     );
 
+    let binary = match crate::providers::maps_scraper::resolve_binary() {
+        Ok(b) => b,
+        Err(e) => {
+            let conn = lock(db)?;
+            finish_job(&conn, job_id, "failed", 0, 0, Some(&e))?;
+            let _ = std::fs::remove_dir_all(&workdir);
+            return Err(AppError::InvalidRequest(e));
+        }
+    };
+
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(900),
-        tokio::process::Command::new("google-maps-scraper")
+        tokio::process::Command::new(&binary)
             .args(&args)
             .kill_on_drop(true)
             .output(),
