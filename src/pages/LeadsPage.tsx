@@ -4,6 +4,7 @@ import { Button, Card, GhostButton, Input } from "../components/ui";
 import {
   bulkSetStatus,
   deleteSavedFilter,
+  enrichDdgLeads,
   enrichLeads,
   enrichWebsites,
   friendlyError,
@@ -174,6 +175,27 @@ export default function LeadsPage() {
     }
   }
 
+  async function onEnrichDdg() {
+    setBusy(true);
+    setInfo(null);
+    setError(null);
+    try {
+      const ids = selected.size > 0 ? [...selected] : leads.filter((l) => !l.website || !l.instagram).slice(0, 10).map((l) => l.id);
+      if (ids.length === 0) {
+        setError("Nada a buscar — todos já têm site e Instagram.");
+        return;
+      }
+      const r = await enrichDdgLeads(ids);
+      setInfo(`Busca web: ${r.enriched} enriquecidos, ${r.failed} falharam.`);
+      setSelected(new Set());
+      load();
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onSaveFilter() {
     if (!filterName.trim()) return;
     await saveNamedFilter(filterName.trim(), currentFilterJson());
@@ -212,6 +234,7 @@ export default function LeadsPage() {
           <GhostButton onClick={() => setQueueMode(!queueMode)}>{queueMode ? "Sair da fila" : "Modo fila"}</GhostButton>
           <GhostButton onClick={onRescore} disabled={busy}>Recalcular</GhostButton>
           <GhostButton onClick={onEnrichDetails} disabled={busy || leads.length === 0}>Detalhes</GhostButton>
+          <GhostButton onClick={onEnrichDdg} disabled={busy || leads.length === 0}>Buscar na web</GhostButton>
           <Button onClick={onEnrichWebsites} disabled={busy || leads.length === 0}>Sites</Button>
         </div>
       </div>

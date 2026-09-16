@@ -44,6 +44,18 @@ pub async fn autocomplete_city_cmd(
 }
 
 #[tauri::command]
+pub async fn search_osm_cmd(
+    db: State<'_, DbState>,
+    query: String,
+    city: String,
+    radius_km: f64,
+) -> Result<SearchResult, AppError> {
+    let (job_id, result_count, new_count) =
+        crate::services::osm_search::run_osm_search(&db, query, city, radius_km * 1000.0).await?;
+    Ok(SearchResult { job_id, result_count, new_count })
+}
+
+#[tauri::command]
 pub async fn search_leads(
     db: State<'_, DbState>,
     query: String,

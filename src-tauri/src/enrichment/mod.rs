@@ -1,4 +1,5 @@
 pub mod contacts;
+pub mod ddg;
 pub mod socials;
 pub mod website;
 

@@ -14,8 +14,10 @@ pub struct ScraperRecord {
     #[serde(default)]
     pub category: Option<String>,
     #[serde(default)]
-    pub phone: Option<String>,
+    pub categories: Option<Vec<String>>,
     #[serde(default)]
+    pub phone: Option<String>,
+    #[serde(default, alias = "web_site")]
     pub website: Option<String>,
     #[serde(default, alias = "review_rating", alias = "reviewRating")]
     pub rating: Option<f64>,
@@ -25,8 +27,12 @@ pub struct ScraperRecord {
     pub latitude: Option<f64>,
     #[serde(default)]
     pub longitude: Option<f64>,
-    #[serde(default, alias = "placeId", alias = "cid", alias = "data_id", alias = "dataId", alias = "google_id", alias = "googleId")]
+    #[serde(default, alias = "placeId")]
     pub place_id: Option<String>,
+    #[serde(default)]
+    pub cid: Option<String>,
+    #[serde(default, alias = "dataId")]
+    pub data_id: Option<String>,
     #[serde(default)]
     pub link: Option<String>,
     #[serde(default)]
@@ -43,18 +49,28 @@ impl ScraperRecord {
     }
 }
 
+fn non_empty(v: &Option<String>) -> Option<String> {
+    v.clone().filter(|s| !s.trim().is_empty())
+}
+
 pub fn adapt_record(r: &ScraperRecord, idx: usize) -> Option<DiscoveredPlace> {
-    let name = r.name.clone().filter(|s| !s.trim().is_empty())?;
-    let external_id = r
-        .place_id
-        .clone()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| r.link.clone().filter(|s| !s.trim().is_empty()))
+    let name = non_empty(&r.name)?;
+    let external_id = non_empty(&r.place_id)
+        .or_else(|| non_empty(&r.data_id))
+        .or_else(|| non_empty(&r.cid))
+        .or_else(|| non_empty(&r.link))
         .unwrap_or_else(|| format!("scraper-{idx}-{}", name.to_lowercase().replace(' ', "-")));
+    let category = non_empty(&r.category).or_else(|| {
+        r.categories
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|s| !s.trim().is_empty())
+    });
     Some(DiscoveredPlace {
         external_id,
         name,
-        category: r.category.clone(),
+        category,
         latitude: r.latitude,
         longitude: r.longitude,
         address: r.address.clone(),
@@ -124,6 +140,8 @@ pub fn check_binary() -> Result<String, String> {
 
 /// Monta os argumentos do subprocesso. Query vai no arquivo de entrada
 /// (`query em cidade`) e a posição em `-geo`/`-radius`/`-zoom`.
+/// Usa `-fast-mode` (HTTP direto, até ~21 resultados por busca): é o modo
+/// rápido e confiável — o modo navegador é lento e vive sendo bloqueado.
 pub fn build_args(
     geo: &str,
     zoom: i32,
@@ -139,6 +157,7 @@ pub fn build_args(
         "-results".into(),
         results_path.into(),
         "-json".into(),
+        "-fast-mode".into(),
         "-lang".into(),
         "pt".into(),
         "-geo".into(),
@@ -147,8 +166,6 @@ pub fn build_args(
         zoom.to_string(),
         "-radius".into(),
         radius_meters.round().to_string(),
-        "-depth".into(),
-        "2".into(),
         "-c".into(),
         concurrency.to_string(),
         "-exit-on-inactivity".into(),
@@ -220,7 +237,19 @@ mod tests {
         assert!(args.contains(&"-geo".to_string()));
         assert!(args.contains(&"-7.08,-41.46".to_string()));
         assert!(args.contains(&"-json".to_string()));
+        assert!(args.contains(&"-fast-mode".to_string()));
         assert!(!args.contains(&"-email".to_string()));
+    }
+
+    #[test]
+    fn adapts_real_fast_mode_shape() {
+        let json = r#"{"title":"Araruna Odontologia","categories":["Clínica odontológica","Dentista"],"address":"Praça Josino Ferreira, 168 - Centro, Picos - PI","web_site":"https://ararunaodontologia.com/","phone":"(89)98117-8571","review_rating":4.9,"review_count":1691,"latitude":-7.0835773,"longitude":-41.4698006,"data_id":"0x79c112393149357:0x27627c7f7e452d8","place_id":"","cid":"","link":""}"#;
+        let rec: ScraperRecord = serde_json::from_str(json).unwrap();
+        let d = adapt_record(&rec, 0).unwrap();
+        assert_eq!(d.category.as_deref(), Some("Clínica odontológica"));
+        assert_eq!(d.website.as_deref(), Some("https://ararunaodontologia.com/"));
+        assert_eq!(d.external_id, "0x79c112393149357:0x27627c7f7e452d8");
+        assert_eq!(d.review_count, Some(1691));
     }
 
     #[test]

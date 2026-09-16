@@ -27,23 +27,48 @@ pub struct ImportResponse {
     pub skipped: i64,
 }
 
+#[derive(Serialize)]
+pub struct StartResponse {
+    pub job_id: i64,
+}
+
 #[tauri::command]
-pub async fn run_scraper_search_cmd(
+pub async fn start_scraper_search_cmd(
     db: State<'_, DbState>,
+    jobs: State<'_, crate::services::scraper_runner::ScraperJobs>,
     query: String,
     city: String,
     radius_km: f64,
     with_email: Option<bool>,
-) -> Result<ImportResponse, AppError> {
-    let r = crate::services::scraper_runner::run_scraper_search(
+) -> Result<StartResponse, AppError> {
+    let job_id = crate::services::scraper_runner::start_scraper_search(
         &db,
+        &jobs,
         query,
         city,
         radius_km * 1000.0,
         with_email.unwrap_or(false),
     )
     .await?;
-    Ok(ImportResponse { job_id: r.job_id, imported: r.imported, merged: r.merged, skipped: r.skipped })
+    Ok(StartResponse { job_id })
+}
+
+#[tauri::command]
+pub async fn poll_scraper_job_cmd(
+    db: State<'_, DbState>,
+    jobs: State<'_, crate::services::scraper_runner::ScraperJobs>,
+    job_id: i64,
+) -> Result<crate::services::scraper_runner::PollResult, AppError> {
+    crate::services::scraper_runner::poll_scraper_job(&db, &jobs, job_id).await
+}
+
+#[tauri::command]
+pub async fn cancel_scraper_search_cmd(
+    db: State<'_, DbState>,
+    jobs: State<'_, crate::services::scraper_runner::ScraperJobs>,
+    job_id: i64,
+) -> Result<(), AppError> {
+    crate::services::scraper_runner::cancel_scraper_job(&db, &jobs, job_id).await
 }
 
 #[tauri::command]

@@ -122,8 +122,24 @@ export async function deleteSavedFilter(id: number) {
   return invoke("delete_filter", { id });
 }
 
-export async function runScraperSearch(query: string, city: string, radiusKm: number, withEmail = false): Promise<{ job_id: number; imported: number; merged: number; skipped: number }> {
-  return invoke("run_scraper_search_cmd", { query, city, radiusKm, withEmail });
+export async function searchOsm(query: string, city: string, radiusKm: number): Promise<SearchResult> {
+  return invoke<SearchResult>("search_osm_cmd", { query, city, radiusKm });
+}
+
+export async function enrichDdg(leadIds: number[]): Promise<{ enriched: number; failed: number }> {
+  return invoke("enrich_ddg_cmd", { leadIds });
+}
+
+export async function startScraperSearch(query: string, city: string, radiusKm: number, withEmail = false): Promise<{ job_id: number }> {
+  return invoke("start_scraper_search_cmd", { query, city, radiusKm, withEmail });
+}
+
+export async function pollScraperJob(jobId: number): Promise<{ running: boolean; elapsed_secs: number; result_kb: number; imported: number; merged: number; skipped: number }> {
+  return invoke("poll_scraper_job_cmd", { jobId });
+}
+
+export async function cancelScraperSearch(jobId: number) {
+  return invoke("cancel_scraper_search_cmd", { jobId });
 }
 
 export async function checkScraperBinary(): Promise<{ available: boolean; message: string }> {
@@ -180,6 +196,10 @@ export async function enrichLeads(leadIds: number[], apiKey: string): Promise<{ 
 
 export async function enrichWebsites(leadIds: number[]): Promise<{ enriched: number; failed: number }> {
   return invoke("enrich_websites_cmd", { leadIds });
+}
+
+export async function enrichDdgLeads(leadIds: number[]): Promise<{ enriched: number; failed: number }> {
+  return invoke("enrich_ddg_cmd", { leadIds });
 }
 
 export async function updateLeadStatus(id: number, status: string) {

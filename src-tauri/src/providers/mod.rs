@@ -1,5 +1,6 @@
 pub mod google_places;
 pub mod maps_scraper;
+pub mod osm;
 
 pub use google_places::GooglePlacesProvider;
 

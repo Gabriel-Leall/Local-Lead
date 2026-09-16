@@ -32,6 +32,15 @@ pub async fn enrich_websites_cmd(
 }
 
 #[tauri::command]
+pub async fn enrich_ddg_cmd(
+    db: State<'_, DbState>,
+    lead_ids: Vec<i64>,
+) -> Result<EnrichResponse, AppError> {
+    let r = crate::services::enrichment::enrich_via_ddg(&db, lead_ids).await?;
+    Ok(EnrichResponse { enriched: r.enriched, failed: r.failed })
+}
+
+#[tauri::command]
 pub fn get_leads_filtered(
     db: State<'_, DbState>,
     name_filter: Option<String>,

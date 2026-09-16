@@ -173,3 +173,104 @@ pub async fn enrich_websites(db: &DbState, lead_ids: Vec<i64>) -> Result<EnrichR
     }
     Ok(EnrichResult { enriched, failed })
 }
+
+/// Enriquecimento via busca web (DuckDuckGo): tenta descobrir site e
+/// Instagram de leads que ainda não têm. Grátis, sem chave.
+pub async fn enrich_via_ddg(db: &DbState, lead_ids: Vec<i64>) -> Result<EnrichResult, AppError> {
+    use crate::enrichment::ddg::{ddg_search, is_social_url};
+    use crate::enrichment::socials::extract_instagram;
+    if lead_ids.is_empty() {
+        return Err(AppError::InvalidRequest("nenhum lead selecionado".into()));
+    }
+    if lead_ids.len() > 20 {
+        return Err(AppError::InvalidRequest("máximo 20 leads por vez".into()));
+    }
+    let mut enriched = 0i64;
+    let mut failed = 0i64;
+    for lead_id in lead_ids {
+        let (name, address, website, instagram): (String, Option<String>, Option<String>, Option<String>) = {
+            let guard = lock(db)?;
+            let (n, a, w, i): (String, Option<String>, Option<String>, Option<String>) = guard.query_row(
+                "SELECT canonical_name, address, website, instagram FROM leads WHERE id=?1",
+                rusqlite::params![lead_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )?;
+            (n, a, w, i)
+        };
+        let city = address.as_deref().unwrap_or("").split(',').next().unwrap_or("").trim();
+        let base = if city.is_empty() { name.clone() } else { format!("{name} {city}") };
+        let queries: Vec<String> = {
+            let mut q = Vec::new();
+            if website.as_deref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+                q.push(base.clone());
+            }
+            if instagram.as_deref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+                q.push(format!("{base} instagram"));
+            }
+            q
+        };
+        if queries.is_empty() {
+            continue;
+        }
+        let mut found_site: Option<String> = None;
+        let mut found_ig: Option<String> = None;
+        let mut blocked = false;
+        for q in &queries {
+            match ddg_search(q).await {
+                Ok(results) => {
+                    let blob: String = results.iter().map(|r| format!("{} {}", r.url, r.title)).collect::<Vec<_>>().join("\n");
+                    if found_ig.is_none() {
+                        found_ig = extract_instagram(&blob);
+                    }
+                    if found_site.is_none() {
+                        found_site = results.into_iter().map(|r| r.url).find(|u| !is_social_url(u));
+                    }
+                }
+                Err(AppError::RateLimit) => {
+                    blocked = true;
+                    break;
+                }
+                Err(_) => {}
+            }
+            sleep_ms(2000).await;
+        }
+        if blocked {
+            {
+                let conn = lock(db)?;
+                record_enrichment_typed(&conn, lead_id, "ddg", "failed", Some("busca web ocupada"))?;
+            }
+            failed += 1;
+            sleep_ms(5000).await;
+            continue;
+        }
+        {
+            let conn = lock(db)?;
+            if found_site.is_some() || found_ig.is_some() {
+                apply_website_enrichment(
+                    &conn,
+                    lead_id,
+                    None,
+                    found_ig.as_deref(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )?;
+                if let Some(site) = found_site {
+                    conn.execute(
+                        "UPDATE leads SET website=COALESCE(NULLIF(website,''), ?1) WHERE id=?2",
+                        rusqlite::params![site, lead_id],
+                    )?;
+                }
+                refresh_score(&conn, lead_id);
+                record_enrichment_typed(&conn, lead_id, "ddg", "completed", None)?;
+                enriched += 1;
+            } else {
+                record_enrichment_typed(&conn, lead_id, "ddg", "failed", Some("nada encontrado"))?;
+                failed += 1;
+            }
+        }
+        sleep_ms(2000).await;
+    }
+    Ok(EnrichResult { enriched, failed })
+}

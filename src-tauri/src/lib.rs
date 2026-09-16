@@ -24,10 +24,12 @@ pub fn run() {
             init_db(&conn).expect("migrate db");
             mark_interrupted(&conn);
             app.manage(DbState(Mutex::new(conn)));
+            app.manage(crate::services::scraper_runner::ScraperJobs::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::search::search_leads,
+            commands::search::search_osm_cmd,
             commands::search::test_places_key,
             commands::search::autocomplete_city_cmd,
             commands::leads::get_leads,
@@ -41,6 +43,7 @@ pub fn run() {
             commands::jobs::cancel_search_job,
             commands::enrichment::enrich_leads_cmd,
             commands::enrichment::enrich_websites_cmd,
+            commands::enrichment::enrich_ddg_cmd,
             commands::enrichment::get_leads_filtered,
             commands::qualification::get_score_config,
             commands::qualification::update_score_config,
@@ -58,7 +61,9 @@ pub fn run() {
             commands::messages::set_outreach_status,
             commands::scraper::check_scraper_binary,
             commands::scraper::import_scraper_json,
-            commands::scraper::run_scraper_search_cmd,
+            commands::scraper::start_scraper_search_cmd,
+            commands::scraper::poll_scraper_job_cmd,
+            commands::scraper::cancel_scraper_search_cmd,
             commands::scraper::get_provider_counts,
             commands::crm::get_activity,
             commands::crm::add_note,

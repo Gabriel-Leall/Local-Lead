@@ -6,6 +6,7 @@ import { downloadCsv, leadsToCsv } from "../lib/csv";
 import {
   autocompleteCity,
   cancelJob,
+  cancelScraperSearch,
   checkScraperBinary,
   friendlyError,
   getLeads,
@@ -13,10 +14,12 @@ import {
   getSearchJobs,
   importScraperJson,
   pauseJob,
+  pollScraperJob,
   resumeJob,
-  runScraperSearch,
   searchLeads,
+  searchOsm,
   startAdaptiveSearch,
+  startScraperSearch,
 } from "../lib/api";
 import { prefs } from "../lib/prefs";
 import { secretStore } from "../lib/secretStore";
@@ -36,7 +39,7 @@ export default function SearchPage() {
   const [sugestoes, setSugestoes] = useState<{ display_name: string; lat: number; lon: number }[]>([]);
   const [coords, setCoords] = useState<[number, number] | null>(null);
   const [radiusKm, setRadiusKm] = useState(5);
-  const [provider, setProvider] = useState<"scraper" | "places">("scraper");
+  const [provider, setProvider] = useState<"osm" | "scraper" | "places">("osm");
   const [strategy, setStrategy] = useState<"single" | "adaptive">("adaptive");
   const [scraperEmail, setScraperEmail] = useState(false);
   const [soSemSite, setSoSemSite] = useState(true);
@@ -48,8 +51,12 @@ export default function SearchPage() {
   const [totalRaio, setTotalRaio] = useState<number | null>(null);
   const [scraperMsg, setScraperMsg] = useState<string | null>(null);
   const [binaryMsg, setBinaryMsg] = useState<string | null>(null);
+  const [binaryOk, setBinaryOk] = useState<boolean | null>(null);
   const [counts, setCounts] = useState<Record<number, string>>({});
+  const [scraperJob, setScraperJob] = useState<number | null>(null);
+  const [scraperInfo, setScraperInfo] = useState<string | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function loadJobs() {
     try {
@@ -66,6 +73,15 @@ export default function SearchPage() {
       if (p.lastRadius) setRadiusKm(p.lastRadius);
     });
     loadJobs();
+    checkScraperBinary()
+      .then((b) => {
+        setBinaryOk(b.available);
+        setBinaryMsg(b.message);
+      })
+      .catch(() => setBinaryOk(false));
+    return () => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -92,10 +108,41 @@ export default function SearchPage() {
     setError(null);
     try {
       await prefs.save({ lastQuery: query, lastCity: city, lastRadius: radiusKm });
-      if (provider === "scraper") {
-        setMessage("Rodando scraper local — pode levar alguns minutos…");
-        const r = await runScraperSearch(query, city, radiusKm, scraperEmail);
-        setMessage(`${r.imported} novos + ${r.merged} unificados (${r.skipped} ignorados). Job #${r.job_id}.`);
+      if (provider === "osm") {
+        const r = await searchOsm(query, city, radiusKm);
+        setMessage(`${r.result_count} encontrados, ${r.new_count} novos no mapa aberto.`);
+      } else if (provider === "scraper") {
+        const { job_id } = await startScraperSearch(query, city, radiusKm, scraperEmail);
+        setScraperJob(job_id);
+        setScraperInfo("Busca iniciada…");
+        setMessage(null);
+        setLoading(false);
+        if (pollTimer.current) clearInterval(pollTimer.current);
+        pollTimer.current = setInterval(async () => {
+          try {
+            const p = await pollScraperJob(job_id);
+            if (p.running) {
+              const mm = Math.floor(p.elapsed_secs / 60);
+              const ss = p.elapsed_secs % 60;
+              setScraperInfo(`Buscando há ${mm > 0 ? `${mm}min ` : ""}${ss}s…`);
+              setMessage(null);
+            } else {
+              if (pollTimer.current) clearInterval(pollTimer.current);
+              setScraperJob(null);
+              setScraperInfo(null);
+              setMessage(`${p.imported} novos + ${p.merged} unificados (${p.skipped} ignorados). Job #${job_id}.`);
+              await loadJobs();
+              await loadResults();
+            }
+          } catch (e) {
+            if (pollTimer.current) clearInterval(pollTimer.current);
+            setScraperJob(null);
+            setScraperInfo(null);
+            setError(friendlyError(e));
+            await loadJobs();
+          }
+        }, 4000);
+        return;
       } else {
         const apiKey = await secretStore.getApiKey();
         if (!apiKey) {
@@ -202,10 +249,12 @@ export default function SearchPage() {
             </div>
             <div>
               <Label>Fonte dos dados</Label>
-              <div className="flex gap-2">
-                <GhostButton onClick={() => setProvider("scraper")} className={provider === "scraper" ? "border-green-700 bg-green-700 text-white hover:bg-green-700" : ""}>Scraper local · sem chave</GhostButton>
+              <div className="flex flex-wrap gap-2">
+                <GhostButton onClick={() => setProvider("osm")} className={provider === "osm" ? "border-green-700 bg-green-700 text-white hover:bg-green-700" : ""}>Mapa aberto · grátis</GhostButton>
+                <GhostButton onClick={() => setProvider("scraper")} className={provider === "scraper" ? "border-green-700 bg-green-700 text-white hover:bg-green-700" : ""}>Scraper local</GhostButton>
                 <GhostButton onClick={() => setProvider("places")} className={provider === "places" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>API Google</GhostButton>
               </div>
+              {provider === "osm" && <p className="mt-1 text-xs text-neutral-500">OpenStreetMap: rápido, sem chave e sem instalar nada.</p>}
             </div>
             {provider === "places" && (
               <div>
@@ -226,9 +275,36 @@ export default function SearchPage() {
               <input type="checkbox" checked={soSemSite} onChange={(e) => setSoSemSite(e.target.checked)} className="accent-green-600" />
               Somente sem site
             </label>
-            <Button onClick={onSearch} disabled={loading} className="bg-green-600 hover:bg-green-500">
-              {loading ? "Buscando…" : soSemSite ? "Buscar leads sem site" : "Buscar leads"}
-            </Button>
+            {binaryOk === false && provider === "scraper" && (
+              <p className="rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                Scraper não encontrado — instale pelo passo “Scraper local” abaixo ou use Importar JSON.
+              </p>
+            )}
+            {scraperJob == null ? (
+              <Button onClick={onSearch} disabled={loading} className="bg-green-600 hover:bg-green-500">
+                {loading ? "Buscando…" : soSemSite ? "Buscar leads sem site" : "Buscar leads"}
+              </Button>
+            ) : (
+              <div className="grid gap-2">
+                <p className="text-sm text-neutral-700">{scraperInfo ?? "Buscando…"}</p>
+                <GhostButton
+                  onClick={async () => {
+                    try {
+                      await cancelScraperSearch(scraperJob);
+                    } catch {
+                      /* já terminou */
+                    }
+                    if (pollTimer.current) clearInterval(pollTimer.current);
+                    setScraperJob(null);
+                    setScraperInfo(null);
+                    setMessage("Busca cancelada.");
+                    loadJobs();
+                  }}
+                >
+                  Cancelar busca
+                </GhostButton>
+              </div>
+            )}
             {message && <p className="text-sm text-neutral-700">{message}</p>}
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
