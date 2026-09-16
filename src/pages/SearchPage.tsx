@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import LeadMap from "../components/LeadMap";
 import { Button, Card, GhostButton, Input, Label } from "../components/ui";
+import { downloadCsv, leadsToCsv } from "../lib/csv";
 import {
+  autocompleteCity,
   cancelJob,
   checkScraperBinary,
   friendlyError,
+  getLeads,
   getProviderCounts,
   getSearchJobs,
   importScraperJson,
@@ -13,33 +17,71 @@ import {
   searchLeads,
   startAdaptiveSearch,
 } from "../lib/api";
+import { prefs } from "../lib/prefs";
 import { secretStore } from "../lib/secretStore";
-import type { SearchJob } from "../types";
+import type { Lead, SearchJob } from "../types";
+
+const NICHOS = ["Dentista", "Nutricionista", "Advogado", "Clínica", "Academia", "Salão de beleza", "Restaurante", "Pet shop", "Imobiliária", "Oficina"];
+
+function temp(score: number) {
+  if (score >= 60) return { label: "Quente", cls: "bg-green-100 text-green-800" };
+  if (score >= 30) return { label: "Morno", cls: "bg-yellow-100 text-yellow-800" };
+  return { label: "Frio", cls: "bg-neutral-100 text-neutral-600" };
+}
 
 export default function SearchPage() {
-  const [query, setQuery] = useState("Dentist");
-  const [city, setCity] = useState("Miami, Florida");
-  const [radiusKm, setRadiusKm] = useState(30);
+  const [query, setQuery] = useState("Dentista");
+  const [city, setCity] = useState("Picos, Piauí");
+  const [sugestoes, setSugestoes] = useState<{ display_name: string; lat: number; lon: number }[]>([]);
+  const [coords, setCoords] = useState<[number, number] | null>(null);
+  const [radiusKm, setRadiusKm] = useState(5);
   const [strategy, setStrategy] = useState<"single" | "adaptive">("adaptive");
+  const [soSemSite, setSoSemSite] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<SearchJob[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [totalRaio, setTotalRaio] = useState<number | null>(null);
   const [scraperMsg, setScraperMsg] = useState<string | null>(null);
   const [binaryMsg, setBinaryMsg] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<number, string>>({});
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function loadJobs() {
     try {
       setJobs(await getSearchJobs());
     } catch {
-      /* ignore before first db init */
+      /* ignora antes da primeira inicialização */
     }
   }
 
   useEffect(() => {
+    prefs.load().then((p) => {
+      if (p.lastQuery) setQuery(p.lastQuery);
+      if (p.lastCity) setCity(p.lastCity);
+      if (p.lastRadius) setRadiusKm(p.lastRadius);
+    });
     loadJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function onCityChange(v: string) {
+    setCity(v);
+    setCoords(null);
+    if (debounce.current) clearTimeout(debounce.current);
+    if (v.trim().length < 3) {
+      setSugestoes([]);
+      return;
+    }
+    debounce.current = setTimeout(async () => {
+      try {
+        setSugestoes(await autocompleteCity(v.trim()));
+      } catch {
+        setSugestoes([]);
+      }
+    }, 400);
+  }
 
   async function onSearch() {
     setLoading(true);
@@ -48,23 +90,43 @@ export default function SearchPage() {
     try {
       const apiKey = await secretStore.getApiKey();
       if (!apiKey) {
-        setError("Save your Google Places API key in Settings first.");
+        setError("Salve sua chave da API do Google Places em Configurações primeiro.");
         return;
       }
+      await prefs.save({ lastQuery: query, lastCity: city, lastRadius: radiusKm });
       if (strategy === "single") {
         const r = await searchLeads({ query, city, radiusKm, apiKey });
-        setMessage(`Initial search results: ${r.result_count} found, ${r.new_count} new.`);
+        setMessage(`Busca inicial: ${r.result_count} encontrados, ${r.new_count} novos.`);
       } else {
         const r = await startAdaptiveSearch({ query, city, radiusKm, apiKey });
-        setMessage(`Adaptive coverage finished. Job #${r.job_id} — see progress below.`);
+        setMessage(`Cobertura adaptativa concluída. Job #${r.job_id} — veja abaixo.`);
       }
       await loadJobs();
+      await loadResults();
     } catch (e) {
       setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
   }
+
+  async function loadResults() {
+    try {
+      const todos = await getLeads({ statusFilter: undefined });
+      setTotalRaio(todos.length);
+      const filtrados = soSemSite ? todos.filter((l) => !l.website) : todos;
+      setLeads(filtrados.slice(0, 100));
+      const comCoords = filtrados.find((l) => l.latitude != null && l.longitude != null);
+      if (!coords && comCoords) setCoords([comCoords.latitude!, comCoords.longitude!]);
+    } catch (e) {
+      setError(friendlyError(e));
+    }
+  }
+
+  useEffect(() => {
+    loadResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soSemSite]);
 
   async function doPause(id: number) {
     await pauseJob(id);
@@ -82,73 +144,164 @@ export default function SearchPage() {
     loadJobs();
   }
 
+  function exportar() {
+    if (leads.length === 0) return;
+    downloadCsv(`leads-${query}-${city}.csv`.replace(/\s+/g, "-"), leadsToCsv(leads));
+  }
+
+  const semSite = leads.filter((l) => !l.website).length;
+
   return (
     <div>
-      <h1 className="text-xl font-semibold tracking-tight">New search</h1>
-      <p className="mt-1 text-sm text-neutral-500">
-        Single = one Text Search. Adaptive = quadtree coverage with systematic cells.
-      </p>
-      <Card>
-        <div className="mt-2 grid gap-4">
-          <div className="grid grid-cols-2 gap-4">
+      <h1 className="text-xl font-semibold tracking-tight">Buscar leads</h1>
+      <p className="mt-1 text-sm text-neutral-500">Digite a cidade e escolha na lista — a última cidade fica salva.</p>
+
+      <div className="mt-4 grid grid-cols-[320px_1fr] gap-4">
+        <Card>
+          <div className="grid gap-3">
             <div>
-              <Label>Niche / Query</Label>
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} />
+              <Label>Nicho</Label>
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} list="nichos" placeholder="Ex: Dentista" />
+              <datalist id="nichos">
+                {NICHOS.map((n) => <option key={n} value={n} />)}
+              </datalist>
+            </div>
+            <div className="relative">
+              <Label>Cidade</Label>
+              <Input value={city} onChange={(e) => onCityChange(e.target.value)} placeholder="Ex: Picos, Piauí" />
+              {sugestoes.length > 0 && (
+                <div className="absolute z-10 mt-1 max-h-44 w-full overflow-auto rounded-lg border border-neutral-200 bg-white shadow-lg">
+                  {sugestoes.map((s) => (
+                    <button
+                      key={s.display_name}
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-neutral-100"
+                      onClick={() => {
+                        setCity(s.display_name);
+                        setCoords([s.lat, s.lon]);
+                        setSugestoes([]);
+                      }}
+                    >
+                      {s.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
-              <Label>City</Label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Radius (km)</Label>
-              <Input type="number" min={1} max={100} value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} />
+              <Label>Raio: {radiusKm} km</Label>
+              <input type="range" min={1} max={50} value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} className="w-full accent-green-600" />
             </div>
             <div>
-              <Label>Strategy</Label>
+              <Label>Estratégia</Label>
               <div className="flex gap-2">
-                {(["single", "adaptive"] as const).map((s) => (
-                  <GhostButton
-                    key={s}
-                    onClick={() => setStrategy(s)}
-                    className={strategy === s ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}
-                  >
-                    {s === "single" ? "Single" : "Adaptive Coverage"}
-                  </GhostButton>
-                ))}
+                <GhostButton onClick={() => setStrategy("single")} className={strategy === "single" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>Simples</GhostButton>
+                <GhostButton onClick={() => setStrategy("adaptive")} className={strategy === "adaptive" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>Adaptativa</GhostButton>
               </div>
             </div>
-          </div>
-          <div>
-            <Button onClick={onSearch} disabled={loading}>
-              {loading ? "Searching…" : strategy === "adaptive" ? "Start adaptive search" : "Start search"}
+            <label className="flex items-center gap-2 text-sm text-neutral-700">
+              <input type="checkbox" checked={soSemSite} onChange={(e) => setSoSemSite(e.target.checked)} className="accent-green-600" />
+              Somente sem site
+            </label>
+            <Button onClick={onSearch} disabled={loading} className="bg-green-600 hover:bg-green-500">
+              {loading ? "Buscando…" : soSemSite ? "Buscar leads sem site" : "Buscar leads"}
             </Button>
+            {message && <p className="text-sm text-neutral-700">{message}</p>}
+            {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
-          {message && <p className="text-sm text-neutral-700">{message}</p>}
-          {error && <p className="text-sm text-red-600">{error}</p>}
-        </div>
-      </Card>
+        </Card>
 
-      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-neutral-500">Maps scraper provider</h2>
+        <div className="grid gap-3">
+          <LeadMap center={coords} radiusKm={radiusKm} leads={leads} />
+          <Card>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-neutral-700">
+                <b>{semSite}</b> de <b>{leads.length}</b> sem site{totalRaio != null ? ` (${totalRaio} no total)` : ""}
+              </p>
+              <div className="flex gap-2">
+                <GhostButton onClick={exportar} disabled={leads.length === 0}>Exportar CSV</GhostButton>
+                <GhostButton onClick={loadResults}>Atualizar</GhostButton>
+              </div>
+            </div>
+            <div className="mt-2 max-h-64 divide-y divide-neutral-100 overflow-auto">
+              {leads.slice(0, 30).map((l) => {
+                const t = temp(l.score ?? 0);
+                return (
+                  <div key={l.id} className="flex items-center justify-between gap-2 py-2">
+                    <div>
+                      <Link to={`/leads/${l.id}`} className="text-sm font-medium hover:underline">{l.canonical_name}</Link>
+                      <div className="text-xs text-neutral-500">{l.address ?? "—"}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${t.cls}`}>{t.label}</span>
+                      <span className="text-xs tabular-nums text-neutral-500">{l.score ?? 0}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {leads.length === 0 && <p className="py-6 text-center text-sm text-neutral-400">Nenhum lead — faça uma busca.</p>}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-neutral-500">Buscas anteriores</h2>
+      <div className="mt-3 grid gap-3">
+        {jobs.map((j) => (
+          <Card key={j.id}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Link to={`/jobs/${j.id}`} className="text-sm font-medium hover:underline">#{j.id} {j.query} · {j.city}</Link>
+                <div className="mt-1 text-xs text-neutral-500">
+                  {j.strategy} · {j.status} · {j.result_count} resultados / {j.new_count} novos ·{" "}
+                  {j.total_cells > 0 ? `${j.completed_cells}/${j.total_cells} células · ${Math.round(j.coverage * 100)}%` : "busca única"}
+                </div>
+                {j.total_cells > 0 && (
+                  <div className="mt-2 h-1.5 w-64 overflow-hidden rounded-full bg-neutral-200">
+                    <div className="h-full bg-green-600" style={{ width: `${Math.round(j.coverage * 100)}%` }} />
+                  </div>
+                )}
+                <button
+                  className="mt-1 text-xs text-neutral-400 hover:underline"
+                  onClick={async () => {
+                    try {
+                      const c = await getProviderCounts(j.id);
+                      setCounts((p) => ({ ...p, [j.id]: c.map((x) => `${x.provider}: ${x.leads}`).join(" · ") || "sem provedores" }));
+                    } catch (err) {
+                      setCounts((p) => ({ ...p, [j.id]: friendlyError(err) }));
+                    }
+                  }}
+                >
+                  {counts[j.id] ?? "Ver provedores"}
+                </button>
+              </div>
+              <div className="flex gap-1">
+                {(j.status === "running" || j.status === "pending") && <GhostButton onClick={() => doPause(j.id)}>Pausar</GhostButton>}
+                {(j.status === "paused" || j.status === "interrupted" || j.status === "failed") && <GhostButton onClick={() => doResume(j.id)}>Continuar</GhostButton>}
+                {j.status !== "cancelled" && j.status !== "completed" && <GhostButton onClick={() => doCancel(j.id)}>Cancelar</GhostButton>}
+              </div>
+            </div>
+          </Card>
+        ))}
+        {jobs.length === 0 && <p className="text-sm text-neutral-400">Nenhuma busca ainda.</p>}
+      </div>
+
+      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-neutral-500">Google Maps Scraper</h2>
       <Card>
-        <p className="text-xs text-neutral-500">
-          Alternative to Places API. Export JSON from gosom/google-maps-scraper, then import here. Cross-provider dedup by website → phone → name+coords.
-        </p>
+        <p className="text-xs text-neutral-500">Alternativa à API. Exporte o JSON do gosom/google-maps-scraper e importe aqui. Deduplicação entre provedores por site → telefone → nome+coordenadas.</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <GhostButton onClick={async () => {
             const b = await checkScraperBinary();
             setBinaryMsg(`${b.available ? "✓" : "—"} ${b.message}`);
-          }}>Check binary</GhostButton>
+          }}>Verificar programa</GhostButton>
           <label className="cursor-pointer rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100">
-            Import JSON
+            Importar JSON
             <input type="file" accept=".json,application/json" className="hidden" onChange={async (e) => {
               const f = e.target.files?.[0];
               if (!f) return;
               const text = await f.text();
               try {
                 const r = await importScraperJson(query, city, text);
-                setScraperMsg(`Imported ${r.imported} new, merged ${r.merged}, skipped ${r.skipped}. Job #${r.job_id}.`);
+                setScraperMsg(`Importados ${r.imported} novos, ${r.merged} unificados, ${r.skipped} ignorados. Job #${r.job_id}.`);
                 loadJobs();
               } catch (err) {
                 setScraperMsg(friendlyError(err));
@@ -159,55 +312,6 @@ export default function SearchPage() {
         </div>
         {scraperMsg && <p className="mt-2 text-sm text-neutral-700">{scraperMsg}</p>}
       </Card>
-
-      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-neutral-500">Recent jobs</h2>
-      <div className="mt-3 grid gap-3">
-        {jobs.map((j) => (
-          <Card key={j.id}>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <Link to={`/jobs/${j.id}`} className="text-sm font-medium hover:underline">
-                  #{j.id} {j.query} · {j.city}
-                </Link>
-                <div className="mt-1 text-xs text-neutral-500">
-                  {j.strategy} · {j.status} · {j.result_count} results / {j.new_count} new ·{" "}
-                  {j.total_cells > 0 ? `${j.completed_cells}/${j.total_cells} cells · ${Math.round(j.coverage * 100)}%` : "single query"}
-                </div>
-                {j.total_cells > 0 && (
-                  <div className="mt-2 h-1.5 w-64 overflow-hidden rounded-full bg-neutral-200">
-                    <div className="h-full bg-neutral-900" style={{ width: `${Math.round(j.coverage * 100)}%` }} />
-                  </div>
-                )}
-                <button
-                  className="mt-1 text-xs text-neutral-400 hover:underline"
-                  onClick={async () => {
-                    try {
-                      const c = await getProviderCounts(j.id);
-                      setCounts((p) => ({ ...p, [j.id]: c.map((x) => `${x.provider}: ${x.leads}`).join(" · ") || "no providers" }));
-                    } catch (err) {
-                      setCounts((p) => ({ ...p, [j.id]: friendlyError(err) }));
-                    }
-                  }}
-                >
-                  {counts[j.id] ?? "Show providers"}
-                </button>
-              </div>
-              <div className="flex gap-1">
-                {(j.status === "running" || j.status === "pending") && (
-                  <GhostButton onClick={() => doPause(j.id)}>Pause</GhostButton>
-                )}
-                {(j.status === "paused" || j.status === "interrupted" || j.status === "failed") && (
-                  <GhostButton onClick={() => doResume(j.id)}>Resume</GhostButton>
-                )}
-                {j.status !== "cancelled" && j.status !== "completed" && (
-                  <GhostButton onClick={() => doCancel(j.id)}>Cancel</GhostButton>
-                )}
-              </div>
-            </div>
-          </Card>
-        ))}
-        {jobs.length === 0 && <p className="text-sm text-neutral-400">No searches yet.</p>}
-      </div>
     </div>
   );
 }

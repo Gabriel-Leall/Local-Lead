@@ -70,19 +70,19 @@ export default function SearchJobPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold tracking-tight">
-        Job #{jobId} {job ? `· ${job.query} · ${job.city}` : ""}
+        Busca #{jobId} {job ? `· ${job.query} · ${job.city}` : ""}
       </h1>
       <p className="mt-1 text-sm text-neutral-500">
-        {job ? `${job.status} · ${Math.round(job.coverage * 100)}% exploration progress (${job.completed_cells}/${job.total_cells} cells)` : "Loading…"}
+        {job ? `${job.status} · ${Math.round(job.coverage * 100)}% de cobertura (${job.completed_cells}/${job.total_cells} células)` : "Carregando…"}
       </p>
       <p className="mt-1 text-xs text-neutral-400">
-        Progress = planned cells processed, not % of real businesses.
+        Progresso = células planejadas processadas, não % dos negócios reais.
       </p>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
       <div className="mt-4 grid grid-cols-[1fr_260px] gap-4">
         <Card>
-          <div className="text-xs uppercase tracking-wide text-neutral-500">Cells</div>
+          <div className="text-xs uppercase tracking-wide text-neutral-500">Células</div>
           <svg viewBox="0 0 600 380" className="mt-2 w-full rounded-lg border border-neutral-200 bg-neutral-50">
             {cells.map((c) => {
               const r = rect(c);
@@ -114,8 +114,8 @@ export default function SearchJobPage() {
           </div>
         </Card>
         <Card>
-          <div className="text-xs uppercase tracking-wide text-neutral-500">Cell detail</div>
-          {!selected && <p className="mt-2 text-sm text-neutral-400">Click a cell.</p>}
+          <div className="text-xs uppercase tracking-wide text-neutral-500">Detalhe da célula</div>
+          {!selected && <p className="mt-2 text-sm text-neutral-400">Clique numa célula.</p>}
           {selected && (
             <dl className="mt-2 space-y-1 text-sm">
               <div className="flex justify-between"><dt className="text-neutral-500">ID</dt><dd>#{selected.id}</dd></div>

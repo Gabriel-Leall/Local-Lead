@@ -118,7 +118,7 @@ export default function LeadsPage() {
     setBusy(true);
     try {
       const r = await rescoreLeads();
-      setInfo(`Rescored ${r.rescored} leads.`);
+      setInfo(`${r.rescored} leads recalculados.`);
       load();
     } catch (e) {
       setError(friendlyError(e));
@@ -134,16 +134,16 @@ export default function LeadsPage() {
     try {
       const apiKey = await secretStore.getApiKey();
       if (!apiKey) {
-        setError("Save your Google Places API key in Settings first.");
+        setError("Salve sua chave da API em Configurações primeiro.");
         return;
       }
       const ids = selected.size > 0 ? [...selected] : leads.slice(0, 20).map((l) => l.id);
       if (ids.length === 0) {
-        setError("No leads to enrich.");
+        setError("Nenhum lead para enriquecer.");
         return;
       }
       const r = await enrichLeads(ids, apiKey);
-      setInfo(`Details: enriched ${r.enriched}, failed ${r.failed}.`);
+      setInfo(`Detalhes: ${r.enriched} enriquecidos, ${r.failed} falharam.`);
       setSelected(new Set());
       load();
     } catch (e) {
@@ -160,11 +160,11 @@ export default function LeadsPage() {
     try {
       const ids = selected.size > 0 ? [...selected] : leads.filter((l) => l.website).slice(0, 20).map((l) => l.id);
       if (ids.length === 0) {
-        setError("No leads with website to crawl.");
+        setError("Nenhum lead com site para rastrear.");
         return;
       }
       const r = await enrichWebsites(ids);
-      setInfo(`Websites: crawled ${r.enriched}, failed ${r.failed}.`);
+      setInfo(`Sites: ${r.enriched} rastreados, ${r.failed} falharam.`);
       setSelected(new Set());
       load();
     } catch (e) {
@@ -195,7 +195,7 @@ export default function LeadsPage() {
       setQueueMode(false);
       setTimeout(load, 50);
     } catch {
-      setError("Saved filter is invalid.");
+      setError("Filtro salvo inválido.");
     }
   }
 
@@ -205,14 +205,14 @@ export default function LeadsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Leads</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            {queueMode ? "Qualification queue: top new leads by score." : "Score prioritizes no-website + contacts + reviews."}
+            {queueMode ? "Fila de qualificação: melhores novos por score." : "Score prioriza sem site + contatos + avaliações."}
           </p>
         </div>
         <div className="flex gap-2">
-          <GhostButton onClick={() => setQueueMode(!queueMode)}>{queueMode ? "Exit queue" : "Queue mode"}</GhostButton>
-          <GhostButton onClick={onRescore} disabled={busy}>Rescore</GhostButton>
-          <GhostButton onClick={onEnrichDetails} disabled={busy || leads.length === 0}>Details</GhostButton>
-          <Button onClick={onEnrichWebsites} disabled={busy || leads.length === 0}>Websites</Button>
+          <GhostButton onClick={() => setQueueMode(!queueMode)}>{queueMode ? "Sair da fila" : "Modo fila"}</GhostButton>
+          <GhostButton onClick={onRescore} disabled={busy}>Recalcular</GhostButton>
+          <GhostButton onClick={onEnrichDetails} disabled={busy || leads.length === 0}>Detalhes</GhostButton>
+          <Button onClick={onEnrichWebsites} disabled={busy || leads.length === 0}>Sites</Button>
         </div>
       </div>
 
@@ -220,27 +220,27 @@ export default function LeadsPage() {
         <div className="mt-4">
           <Card>
             <div className="grid grid-cols-4 gap-2">
-              <Input placeholder="Search by name" value={name} onChange={(e) => setName(e.target.value)} />
-              <Input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
+              <Input placeholder="Buscar por nome" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input placeholder="Categoria" value={category} onChange={(e) => setCategory(e.target.value)} />
               <select value={status} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm">
-                <option value="">All statuses</option>
+                <option value="">Todos os status</option>
                 {["new","qualified","message_ready","contacted","replied","interested","meeting","won","lost","skipped","do_not_contact"].map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
               <select value={presence} onChange={(e) => setPresence(e.target.value)} className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm">
-                <option value="">All presence</option>
-                <option value="with-site">With website</option>
-                <option value="no-site">No website</option>
-                <option value="with-phone">With phone</option>
-                <option value="with-email">With email</option>
-                <option value="with-ig">With Instagram</option>
+                <option value="">Toda presença</option>
+                <option value="with-site">Com site</option>
+                <option value="no-site">Sem site</option>
+                <option value="with-phone">Com telefone</option>
+                <option value="with-email">Com e-mail</option>
+                <option value="with-ig">Com Instagram</option>
               </select>
-              <Input placeholder="Rating ≥" value={minRating} onChange={(e) => setMinRating(e.target.value)} />
-              <Input placeholder="Reviews ≥" value={minReviews} onChange={(e) => setMinReviews(e.target.value)} />
+              <Input placeholder="Nota ≥" value={minRating} onChange={(e) => setMinRating(e.target.value)} />
+              <Input placeholder="Avaliações ≥" value={minReviews} onChange={(e) => setMinReviews(e.target.value)} />
               <Input placeholder="Score ≥" value={minScore} onChange={(e) => setMinScore(e.target.value)} />
               <select value={siteStatus} onChange={(e) => setSiteStatus(e.target.value)} className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm">
-                <option value="">Site: all</option>
+                <option value="">Site: todos</option>
                 <option value="active">active</option>
                 <option value="unreachable">unreachable</option>
                 <option value="redirect">redirect</option>
@@ -248,18 +248,18 @@ export default function LeadsPage() {
                 <option value="none">none</option>
               </select>
               <div className="col-span-4 flex flex-wrap items-center gap-2">
-                <GhostButton onClick={load}>Filter</GhostButton>
-                <GhostButton onClick={() => { setName(""); setCategory(""); setStatusFilter(""); setPresence(""); setSiteStatus(""); setMinRating(""); setMinReviews(""); setMinScore(""); }}>Clear</GhostButton>
+                <GhostButton onClick={load}>Filtrar</GhostButton>
+                <GhostButton onClick={() => { setName(""); setCategory(""); setStatusFilter(""); setPresence(""); setSiteStatus(""); setMinRating(""); setMinReviews(""); setMinScore(""); }}>Limpar</GhostButton>
                 {selected.size > 0 && (
                   <>
-                    <GhostButton onClick={() => onBulk("qualified")}>Qualify ({selected.size})</GhostButton>
-                    <GhostButton onClick={() => onBulk("skipped")}>Skip ({selected.size})</GhostButton>
+                    <GhostButton onClick={() => onBulk("qualified")}>Qualificar ({selected.size})</GhostButton>
+                    <GhostButton onClick={() => onBulk("skipped")}>Pular ({selected.size})</GhostButton>
                   </>
                 )}
               </div>
               <div className="col-span-4 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-2">
-                <Input placeholder="Save current as…" value={filterName} onChange={(e) => setFilterName(e.target.value)} className="max-w-48" />
-                <GhostButton onClick={onSaveFilter}>Save filter</GhostButton>
+                <Input placeholder="Salvar atual como…" value={filterName} onChange={(e) => setFilterName(e.target.value)} className="max-w-48" />
+                <GhostButton onClick={onSaveFilter}>Salvar filtro</GhostButton>
                 {saved.map((f) => (
                   <span key={f.id} className="flex items-center gap-1 rounded-full bg-neutral-100 py-1 pl-3 pr-1 text-xs">
                     <button onClick={() => applySaved(f)} className="hover:underline">{f.name}</button>
@@ -277,17 +277,17 @@ export default function LeadsPage() {
       <div className="mt-4 overflow-x-auto rounded-xl border border-neutral-200 bg-white">
         <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-            <tr>
-              <th className="px-3 py-2"><input type="checkbox" checked={selected.size > 0 && selected.size === leads.length} onChange={() => setSelected(selected.size === leads.length ? new Set() : new Set(leads.map((l) => l.id)))} /></th>
-              <th className="px-4 py-2">Score</th>
-              <th className="px-4 py-2">Business</th>
-              <th className="px-4 py-2">Site</th>
-              <th className="px-4 py-2">IG</th>
-              <th className="px-4 py-2">Email</th>
-              <th className="px-4 py-2">Rating</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2" />
-            </tr>
+              <tr>
+                <th className="px-3 py-2"><input type="checkbox" checked={selected.size > 0 && selected.size === leads.length} onChange={() => setSelected(selected.size === leads.length ? new Set() : new Set(leads.map((l) => l.id)))} /></th>
+                <th className="px-4 py-2">Score</th>
+                <th className="px-4 py-2">Negócio</th>
+                <th className="px-4 py-2">Site</th>
+                <th className="px-4 py-2">IG</th>
+                <th className="px-4 py-2">E-mail</th>
+                <th className="px-4 py-2">Nota</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2" />
+              </tr>
           </thead>
           <tbody>
             {leads.map((l) => (
@@ -302,14 +302,14 @@ export default function LeadsPage() {
                 <td className="px-4 py-2"><span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs">{l.lead_status}</span></td>
                 <td className="px-4 py-2 text-right">
                   <div className="flex justify-end gap-1">
-                    <GhostButton onClick={() => changeStatus(l.id, "qualified")}>Qualify</GhostButton>
-                    <GhostButton onClick={() => changeStatus(l.id, "skipped")}>Skip</GhostButton>
+                    <GhostButton onClick={() => changeStatus(l.id, "qualified")}>Qualificar</GhostButton>
+                    <GhostButton onClick={() => changeStatus(l.id, "skipped")}>Pular</GhostButton>
                   </div>
                 </td>
               </tr>
             ))}
             {leads.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-neutral-400">No leads in queue. Enrich more or clear filters.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-neutral-400">Sem leads — enriqueça mais ou limpe os filtros.</td></tr>
             )}
           </tbody>
         </table>

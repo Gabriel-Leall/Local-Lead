@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import LeadDetailPage from "./pages/LeadDetailPage";
@@ -12,12 +12,16 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="search" element={<SearchPage />} />
+          <Route index element={<SearchPage />} />
+          <Route path="buscar" element={<SearchPage />} />
           <Route path="jobs/:id" element={<SearchJobPage />} />
           <Route path="leads" element={<LeadsPage />} />
           <Route path="leads/:id" element={<LeadDetailPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="painel" element={<DashboardPage />} />
+          <Route path="config" element={<SettingsPage />} />
+          {/* aliases antigos em inglês */}
+          <Route path="search" element={<Navigate to="/" replace />} />
+          <Route path="settings" element={<Navigate to="/config" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

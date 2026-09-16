@@ -162,20 +162,16 @@ impl GooglePlacesProvider {
             .send()
             .await?;
         let status = resp.status();
-        if status.as_u16() == 400 {
-            return Err(AppError::InvalidRequest("bad details request".into()));
-        }
-        if status.as_u16() == 401 || status.as_u16() == 403 {
-            return Err(AppError::InvalidApiKey);
-        }
-        if status.as_u16() == 429 {
-            return Err(AppError::RateLimit);
-        }
-        if status.as_u16() == 404 {
-            return Err(AppError::InvalidRequest("place not found".into()));
-        }
         if !status.is_success() {
-            return Err(AppError::Provider(format!("details http {status}")));
+            let body = resp.text().await.unwrap_or_default();
+            let hint = crate::error::google_error_hint(&body);
+            return match status.as_u16() {
+                400 => Err(AppError::InvalidRequest(format!("pedido rejeitado: {hint}"))),
+                401 | 403 => Err(AppError::InvalidApiKey),
+                404 => Err(AppError::InvalidRequest("estabelecimento não encontrado".into())),
+                429 => Err(AppError::RateLimit),
+                _ => Err(AppError::Provider(format!("detalhes http {status}: {hint}"))),
+            };
         }
         let place: GooglePlace = resp.json().await.map_err(|e| AppError::Parse(e.to_string()))?;
         Ok(map_details(&place))
@@ -198,17 +194,15 @@ impl GooglePlacesProvider {
             .await?;
 
         let status = resp.status();
-        if status.as_u16() == 400 {
-            return Err(AppError::InvalidRequest("bad request — check query".into()));
-        }
-        if status.as_u16() == 401 || status.as_u16() == 403 {
-            return Err(AppError::InvalidApiKey);
-        }
-        if status.as_u16() == 429 {
-            return Err(AppError::RateLimit);
-        }
         if !status.is_success() {
-            return Err(AppError::Provider(format!("http {status}")));
+            let body = resp.text().await.unwrap_or_default();
+            let hint = crate::error::google_error_hint(&body);
+            return match status.as_u16() {
+                400 => Err(AppError::InvalidRequest(format!("pedido rejeitado: {hint}"))),
+                401 | 403 => Err(AppError::InvalidApiKey),
+                429 => Err(AppError::RateLimit),
+                _ => Err(AppError::Provider(format!("busca http {status}: {hint}"))),
+            };
         }
 
         let body: TextSearchResponse = resp

@@ -2,21 +2,21 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("database error: {0}")]
+    #[error("erro de banco de dados: {0}")]
     Database(String),
-    #[error("provider error: {0}")]
+    #[error("erro do provedor: {0}")]
     Provider(String),
-    #[error("invalid api key")]
+    #[error("chave de API inválida ou sem permissão — verifique a chave e se a Places API (New) está ativada com faturamento")]
     InvalidApiKey,
-    #[error("rate limited, retry later")]
+    #[error("limite de requisições excedido — aguarde e tente de novo")]
     RateLimit,
-    #[error("network error: {0}")]
+    #[error("erro de rede: {0}")]
     Network(String),
-    #[error("parse error: {0}")]
+    #[error("erro ao interpretar resposta: {0}")]
     Parse(String),
-    #[error("missing api key — configure it in Settings")]
+    #[error("chave de API ausente — salve a chave em Configurações")]
     MissingApiKey,
-    #[error("invalid request: {0}")]
+    #[error("requisição inválida: {0}")]
     InvalidRequest(String),
 }
 
@@ -35,8 +35,29 @@ impl From<rusqlite::Error> for AppError {
 impl From<reqwest::Error> for AppError {
     fn from(e: reqwest::Error) -> Self {
         if e.is_timeout() {
-            return Self::Network("timeout — check your connection".into());
+            return Self::Network("tempo esgotado — verifique sua conexão".into());
+        }
+        if e.is_connect() {
+            return Self::Network("sem conexão — verifique sua internet".into());
         }
         Self::Network(e.to_string())
     }
+}
+
+/// Extrai a mensagem de erro da API do Google (JSON) para diagnóstico.
+pub fn google_error_hint(body: &str) -> String {
+    let short: String = body.chars().take(300).collect();
+    if short.contains("has not been used") || short.contains("SERVICE_DISABLED") {
+        return "a Places API (New) não está ativada no Google Cloud para esta chave".into();
+    }
+    if short.contains("BILLING_DISABLED") || short.contains("billing") {
+        return "o faturamento (billing) não está ativo no projeto Google Cloud".into();
+    }
+    if short.contains("API_KEY_INVALID") || short.contains("API key not valid") {
+        return "a chave de API é inválida".into();
+    }
+    if short.contains("REQUEST_DENIED") {
+        return format!("pedido negado: {short}");
+    }
+    short
 }

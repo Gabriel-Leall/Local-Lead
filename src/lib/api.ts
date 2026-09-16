@@ -110,6 +110,14 @@ export async function saveNamedFilter(name: string, filtersJson: string): Promis
   return invoke("save_named_filter", { name, filtersJson });
 }
 
+export async function testPlacesKey(apiKey: string): Promise<{ ok: boolean; found: number }> {
+  return invoke("test_places_key", { apiKey });
+}
+
+export async function autocompleteCity(query: string): Promise<{ display_name: string; lat: number; lon: number }[]> {
+  return invoke("autocomplete_city_cmd", { query });
+}
+
 export async function deleteSavedFilter(id: number) {
   return invoke("delete_filter", { id });
 }

@@ -28,6 +28,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::search::search_leads,
+            commands::search::test_places_key,
+            commands::search::autocomplete_city_cmd,
             commands::leads::get_leads,
             commands::leads::update_lead_status,
             commands::dashboard::get_dashboard_stats,

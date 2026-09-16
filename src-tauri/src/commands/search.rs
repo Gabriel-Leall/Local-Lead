@@ -11,6 +11,38 @@ pub struct SearchResult {
     pub new_count: i64,
 }
 
+#[derive(Serialize)]
+pub struct KeyTest {
+    pub ok: bool,
+    pub found: usize,
+}
+
+#[tauri::command]
+pub async fn test_places_key(api_key: String) -> Result<KeyTest, AppError> {
+    use crate::providers::{DiscoveryProvider, GooglePlacesProvider, RegionSearchRequest};
+    if api_key.trim().is_empty() {
+        return Err(AppError::MissingApiKey);
+    }
+    let provider = GooglePlacesProvider::new();
+    let places = provider
+        .search_region(&RegionSearchRequest {
+            query: "dentista".into(),
+            api_key,
+            center_lat: -23.5558,
+            center_lng: -46.6396,
+            radius_meters: 5000.0,
+        })
+        .await?;
+    Ok(KeyTest { ok: true, found: places.len() })
+}
+
+#[tauri::command]
+pub async fn autocomplete_city_cmd(
+    query: String,
+) -> Result<Vec<crate::services::geocode::CitySuggestion>, AppError> {
+    crate::services::geocode::autocomplete_city(&query).await
+}
+
 #[tauri::command]
 pub async fn search_leads(
     db: State<'_, DbState>,
