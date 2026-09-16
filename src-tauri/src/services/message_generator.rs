@@ -38,24 +38,24 @@ pub fn builtin_templates() -> Vec<MessageTemplate> {
     vec![
         MessageTemplate {
             id: "no_website",
-            label: "No website — first contact",
+            label: "Sem site — primeiro contato",
             channel: "email",
-            subject: "Quick idea for {name}",
-            body: "Hi {name} team,\n\nI found {name}{category_part} while looking at local businesses{city_part}. I noticed you don't have a website listed, so some customers may have trouble finding you.\n{rating_part}\nI build simple, fast websites for local businesses. Would you like a free mockup to review — no commitment?\n\nBest regards",
+            subject: "Uma ideia rápida para {name}",
+            body: "Olá, equipe {name}!\n\nEncontrei {name}{category_part} pesquisando negócios locais{city_part}. Vi que vocês não têm site cadastrado, então alguns clientes podem ter dificuldade para encontrá-los.\n{rating_part}\nEu crio sites simples e rápidos para negócios locais. Gostariam de ver uma proposta gratuita, sem compromisso?\n\nAtenciosamente",
         },
         MessageTemplate {
             id: "generic",
-            label: "Generic — first contact",
+            label: "Genérico — primeiro contato",
             channel: "email",
-            subject: "Quick idea for {name}",
-            body: "Hi {name} team,\n\nI found {name}{category_part}{city_part}.\n{rating_part}\nI help local businesses get more customers with a simple online presence. Would a quick 10-minute chat make sense?\n\nBest regards",
+            subject: "Uma ideia rápida para {name}",
+            body: "Olá, equipe {name}!\n\nEncontrei {name}{category_part}{city_part}.\n{rating_part}\nAjudo negócios locais a conquistar mais clientes com presença online simples. Faz sentido uma conversa rápida de 10 minutos?\n\nAtenciosamente",
         },
         MessageTemplate {
             id: "follow_up",
-            label: "Follow-up",
+            label: "Retorno",
             channel: "email",
             subject: "Re: {name}",
-            body: "Hi {name} team,\n\nJust following up on my previous message. If improving your online presence is a priority this month, I can share a quick idea tailored to your business.\n\nBest regards",
+            body: "Olá, equipe {name}!\n\nPassando para retomar minha mensagem anterior. Se melhorar a presença online é prioridade neste mês, posso compartilhar uma ideia rápida pensada para o negócio de vocês.\n\nAtenciosamente",
         },
     ]
 }
@@ -69,11 +69,11 @@ pub fn render_template(t: &MessageTemplate, ctx: &LeadContext) -> (String, Strin
     let city_part = ctx
         .city
         .as_deref()
-        .map(|c| format!(" in {c}"))
+        .map(|c| format!(" em {c}"))
         .unwrap_or_default();
     let rating_part = match (ctx.rating, ctx.reviews) {
-        (Some(r), Some(n)) => format!("I also saw your {r:.1} rating with {n} reviews — nice work."),
-        (Some(r), None) => format!("I also saw your {r:.1} rating — nice work."),
+        (Some(r), Some(n)) => format!("Vi também a nota {r:.1} com {n} avaliações — parabéns."),
+        (Some(r), None) => format!("Vi também a nota {r:.1} — parabéns."),
         _ => String::new(),
     };
     let subject = t

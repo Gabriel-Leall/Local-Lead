@@ -79,6 +79,9 @@ pub fn adapt_record(r: &ScraperRecord, idx: usize) -> Option<DiscoveredPlace> {
         website: r.website.clone(),
         rating: r.rating,
         review_count: r.reviews,
+        // O scraper fast-mode não retorna redes sociais.
+        instagram: None,
+        facebook: None,
     })
 }
 

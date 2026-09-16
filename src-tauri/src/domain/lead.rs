@@ -58,4 +58,10 @@ pub struct DiscoveredPlace {
     pub website: Option<String>,
     pub rating: Option<f64>,
     pub review_count: Option<i64>,
+    /// Redes sociais vindas da fonte (ex: tags contact:* do OSM).
+    /// Nem Google Places nem scraper fornecem isso — só enriquecimento e OSM.
+    #[serde(default)]
+    pub instagram: Option<String>,
+    #[serde(default)]
+    pub facebook: Option<String>,
 }

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Button, Card, GhostButton } from "../components/ui";
 import {
   addNote,
+  enrichDdgLeads,
   friendlyError,
   generateMessage,
   getActivity,
@@ -30,6 +31,22 @@ export default function LeadDetailPage() {
   const [followUp, setFollowUp] = useState("");
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [finding, setFinding] = useState(false);
+
+  async function onFindWeb() {
+    setFinding(true);
+    setInfo(null);
+    setError(null);
+    try {
+      const r = await enrichDdgLeads([leadId]);
+      setInfo(`Busca web: ${r.enriched} enriquecido(s), ${r.failed} sem novidade.`);
+      load();
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setFinding(false);
+    }
+  }
 
   async function load() {
     try {
@@ -102,7 +119,13 @@ export default function LeadDetailPage() {
             <div className="flex justify-between"><dt className="text-neutral-500">Site</dt><dd>{lead.website ?? "—"} ({lead.website_status ?? "desconhecido"})</dd></div>
             <div className="flex justify-between"><dt className="text-neutral-500">Nota</dt><dd>{lead.rating ?? "—"} ({lead.review_count ?? "—"})</dd></div>
           </dl>
-          <div className="mt-3 flex flex-wrap gap-1">
+          {(!lead.instagram || !lead.website) && (
+            <p className="mt-2 text-xs text-neutral-500">
+              Faltando Instagram/site? O Google não fornece — clique abaixo para procurar na web.
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-1">
+            <GhostButton onClick={onFindWeb} disabled={finding}>{finding ? "Procurando…" : "Buscar na web"}</GhostButton>
             {lead.website && <a href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`} target="_blank" rel="noreferrer"><GhostButton>Abrir site</GhostButton></a>}
             {lead.instagram && <a href={`https://instagram.com/${lead.instagram}`} target="_blank" rel="noreferrer"><GhostButton>Abrir IG</GhostButton></a>}
             {emailHref && <a href={emailHref}><GhostButton>Abrir e-mail</GhostButton></a>}

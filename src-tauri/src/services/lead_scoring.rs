@@ -41,6 +41,17 @@ pub struct LeadView<'a> {
     pub review_count: Option<i64>,
 }
 
+/// Recalcula todos os scores com a config salva (ou padrão).
+/// Chamado após cada importação para nenhum lead ficar com score 0.
+pub fn rescore_with_saved_config(conn: &rusqlite::Connection) {
+    let cfg: ScoreConfig = crate::database::repositories::get_config(conn, "score_config")
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let _ = rescore_all(conn, &cfg);
+}
+
 pub fn rescore_all(
     conn: &rusqlite::Connection,
     cfg: &ScoreConfig,

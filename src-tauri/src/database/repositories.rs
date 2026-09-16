@@ -246,7 +246,7 @@ pub fn upsert_lead_in_cell(
 
     if let Some(lead_id) = existing {
         conn.execute(
-            "UPDATE leads SET category=COALESCE(?1,category), address=COALESCE(?2,address), latitude=COALESCE(?3,latitude), longitude=COALESCE(?4,longitude), phone=COALESCE(?5,phone), website=COALESCE(?6,website), rating=COALESCE(?7,rating), review_count=COALESCE(?8,review_count), updated_at=?9 WHERE id=?10",
+            "UPDATE leads SET category=COALESCE(?1,category), address=COALESCE(?2,address), latitude=COALESCE(?3,latitude), longitude=COALESCE(?4,longitude), phone=COALESCE(?5,phone), website=COALESCE(?6,website), rating=COALESCE(?7,rating), review_count=COALESCE(?8,review_count), instagram=COALESCE(?9,instagram), facebook=COALESCE(?10,facebook), updated_at=?11 WHERE id=?12",
             params![
                 place.category,
                 place.address,
@@ -256,6 +256,8 @@ pub fn upsert_lead_in_cell(
                 place.website,
                 place.rating,
                 place.review_count,
+                place.instagram,
+                place.facebook,
                 now(),
                 lead_id
             ],
@@ -264,7 +266,7 @@ pub fn upsert_lead_in_cell(
     }
 
     conn.execute(
-        "INSERT INTO leads (canonical_name, category, address, latitude, longitude, phone, website, rating, review_count, lead_status, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'new',?10,?10)",
+        "INSERT INTO leads (canonical_name, category, address, latitude, longitude, phone, website, rating, review_count, instagram, facebook, lead_status, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'new',?12,?12)",
         params![
             place.name,
             place.category,
@@ -275,6 +277,8 @@ pub fn upsert_lead_in_cell(
             place.website,
             place.rating,
             place.review_count,
+            place.instagram,
+            place.facebook,
             now()
         ],
     )?;
@@ -650,8 +654,8 @@ pub fn upsert_scraper_place(
     )? {
         crate::dedupe::Match::Lead(lead_id) => {
             conn.execute(
-                "UPDATE leads SET category=COALESCE(?1,category), address=COALESCE(?2,address), latitude=COALESCE(?3,latitude), longitude=COALESCE(?4,longitude), phone=COALESCE(?5,phone), website=COALESCE(?6,website), rating=COALESCE(?7,rating), review_count=COALESCE(?8,review_count), updated_at=?9 WHERE id=?10",
-                params![place.category, place.address, place.latitude, place.longitude, place.phone, place.website, place.rating, place.review_count, now(), lead_id],
+                "UPDATE leads SET category=COALESCE(?1,category), address=COALESCE(?2,address), latitude=COALESCE(?3,latitude), longitude=COALESCE(?4,longitude), phone=COALESCE(?5,phone), website=COALESCE(?6,website), rating=COALESCE(?7,rating), review_count=COALESCE(?8,review_count), instagram=COALESCE(?9,instagram), facebook=COALESCE(?10,facebook), updated_at=?11 WHERE id=?12",
+                params![place.category, place.address, place.latitude, place.longitude, place.phone, place.website, place.rating, place.review_count, place.instagram, place.facebook, now(), lead_id],
             )?;
             conn.execute(
                 "INSERT OR IGNORE INTO external_places (lead_id, provider, external_place_id, raw_name, raw_address, discovered_at) VALUES (?1,?2,?3,?4,?5,?6)",
@@ -799,6 +803,8 @@ mod tests {
             website: None,
             rating: Some(4.8),
             review_count: Some(10),
+            instagram: None,
+            facebook: None,
         }
     }
 

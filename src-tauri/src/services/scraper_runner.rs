@@ -293,6 +293,7 @@ pub async fn poll_scraper_job(
             ));
         }
         finish_job(&conn, job_id, "completed", imported + merged, imported, None)?;
+        crate::services::lead_scoring::rescore_with_saved_config(&conn);
     }
     let elapsed = running.started_at.elapsed().as_secs();
     let _ = std::fs::remove_dir_all(&running.workdir);

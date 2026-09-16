@@ -53,6 +53,7 @@ pub async fn run_osm_search(
             }
         }
         finish_job(&conn, job_id, "completed", places.len() as i64, new_count, None)?;
+        crate::services::lead_scoring::rescore_with_saved_config(&conn);
     }
     Ok((job_id, places.len() as i64, new_count))
 }

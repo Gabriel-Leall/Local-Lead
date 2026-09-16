@@ -59,6 +59,7 @@ pub async fn run_search(
             new_count,
             None,
         )?;
+        crate::services::lead_scoring::rescore_with_saved_config(&conn);
     }
 
     Ok((job_id, places.len() as i64, new_count))

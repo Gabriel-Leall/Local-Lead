@@ -84,6 +84,9 @@ pub fn map_place(p: &GooglePlace) -> Option<DiscoveredPlace> {
         website: p.website_uri.clone(),
         rating: p.rating,
         review_count: p.user_rating_count,
+        // A API do Google não retorna redes sociais (só site/telefone).
+        instagram: None,
+        facebook: None,
     })
 }
 

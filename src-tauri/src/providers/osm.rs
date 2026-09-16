@@ -157,6 +157,27 @@ pub fn adapt_element(e: &Element) -> Option<DiscoveredPlace> {
         .or_else(|| e.tags.get("leisure"))
         .or_else(|| e.tags.get("tourism"))
         .cloned();
+    // OSM também carrega redes sociais quando mapeadas (contact:instagram etc.)
+    let instagram = e
+        .tags
+        .get("contact:instagram")
+        .or_else(|| e.tags.get("instagram"))
+        .map(|s| {
+            s.trim()
+                .trim_start_matches('@')
+                .trim_matches('/')
+                .split('/')
+                .next_back()
+                .unwrap_or(s)
+                .to_string()
+        })
+        .filter(|s| !s.is_empty());
+    let facebook = e
+        .tags
+        .get("contact:facebook")
+        .or_else(|| e.tags.get("facebook"))
+        .cloned()
+        .filter(|s| !s.trim().is_empty());
     Some(DiscoveredPlace {
         external_id: format!("osm:{}/{}", e.etype, e.id),
         name,
@@ -177,6 +198,8 @@ pub fn adapt_element(e: &Element) -> Option<DiscoveredPlace> {
             .cloned(),
         rating: None,
         review_count: None,
+        instagram,
+        facebook,
     })
 }
 
@@ -295,5 +318,26 @@ mod tests {
     #[test]
     fn skips_nameless_elements() {
         assert!(adapt_element(&Element::default()).is_none());
+    }
+
+    #[test]
+    fn reads_social_tags() {
+        let e = Element {
+            etype: "node".into(),
+            id: 9,
+            lat: Some(0.0),
+            lon: Some(0.0),
+            center: None,
+            tags: [
+                ("name".into(), "X".into()),
+                ("contact:instagram".into(), "@clinica.x/".into()),
+                ("contact:facebook".into(), "https://facebook.com/x".into()),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let d = adapt_element(&e).unwrap();
+        assert_eq!(d.instagram.as_deref(), Some("clinica.x"));
+        assert_eq!(d.facebook.as_deref(), Some("https://facebook.com/x"));
     }
 }

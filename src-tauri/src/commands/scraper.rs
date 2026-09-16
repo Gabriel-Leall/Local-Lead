@@ -117,6 +117,7 @@ pub fn import_scraper_json(
         }
     }
     finish_job(&conn, job_id, "completed", imported + merged, imported, None)?;
+    crate::services::lead_scoring::rescore_with_saved_config(&conn);
     Ok(ImportResponse { job_id, imported, merged, skipped })
 }
 

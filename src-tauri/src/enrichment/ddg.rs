@@ -125,12 +125,54 @@ pub fn is_social_url(url: &str) -> bool {
     SOCIAL_HOSTS.iter().any(|h| lower.contains(h))
 }
 
+fn lite_link_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#"(?s)<a rel="nofollow" href="([^"]+)"[^>]*>(.*?)</a>"#)
+            .expect("ddg lite regex")
+    })
+}
+
+/// Parser do endpoint lite (retorna 200 real; o html retorna 202 bloqueado).
+pub fn parse_lite_results(html: &str) -> Vec<DdgResult> {
+    lite_link_re()
+        .captures_iter(html)
+        .map(|c| DdgResult {
+            url: unwrap_url(&c[1]),
+            title: clean_html(&c[2]),
+            snippet: String::new(),
+        })
+        .filter(|r| {
+            !r.url.is_empty()
+                && (r.url.starts_with("http") || r.url.starts_with("www."))
+                && !r.url.contains("duckduckgo.com")
+        })
+        .take(8)
+        .collect()
+}
+
 pub async fn ddg_search(query: &str) -> Result<Vec<DdgResult>, AppError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
         .build()
         .map_err(|e| AppError::Network(e.to_string()))?;
+    // lite primeiro: é o que responde 200 de verdade
+    let lite = client
+        .get("https://lite.duckduckgo.com/lite/")
+        .query(&[("q", query)])
+        .send()
+        .await;
+    if let Ok(resp) = lite {
+        if resp.status().is_success() {
+            if let Ok(html) = resp.text().await {
+                let r = parse_lite_results(&html);
+                if !r.is_empty() {
+                    return Ok(r);
+                }
+            }
+        }
+    }
     let resp = client
         .get("https://html.duckduckgo.com/html/")
         .query(&[("q", query)])
@@ -143,7 +185,11 @@ pub async fn ddg_search(query: &str) -> Result<Vec<DdgResult>, AppError> {
         return Err(AppError::Provider(format!("busca web http {}", resp.status())));
     }
     let html = resp.text().await.map_err(|e| AppError::Parse(e.to_string()))?;
-    Ok(parse_results(&html))
+    let r = parse_results(&html);
+    if r.is_empty() {
+        return Err(AppError::Provider("busca web sem resultados".into()));
+    }
+    Ok(r)
 }
 
 fn status_blocked(s: reqwest::StatusCode) -> bool {
@@ -173,5 +219,18 @@ mod tests {
     fn detects_social_urls() {
         assert!(is_social_url("https://instagram.com/x"));
         assert!(!is_social_url("https://clinica.com.br"));
+    }
+
+    const LITE_FIXTURE: &str = r#"
+        <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fararunaodontologia.com%2F&amp;rut=abc">Araruna Odontologia</a>
+        <a rel="nofollow" href="https://instagram.com/ararunaodonto">Instagram Araruna</a>
+    "#;
+
+    #[test]
+    fn parses_lite_links() {
+        let r = parse_lite_results(LITE_FIXTURE);
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].url, "https://ararunaodontologia.com/");
+        assert_eq!(r[1].url, "https://instagram.com/ararunaodonto");
     }
 }
