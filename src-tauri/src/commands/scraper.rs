@@ -28,6 +28,25 @@ pub struct ImportResponse {
 }
 
 #[tauri::command]
+pub async fn run_scraper_search_cmd(
+    db: State<'_, DbState>,
+    query: String,
+    city: String,
+    radius_km: f64,
+    with_email: Option<bool>,
+) -> Result<ImportResponse, AppError> {
+    let r = crate::services::scraper_runner::run_scraper_search(
+        &db,
+        query,
+        city,
+        radius_km * 1000.0,
+        with_email.unwrap_or(false),
+    )
+    .await?;
+    Ok(ImportResponse { job_id: r.job_id, imported: r.imported, merged: r.merged, skipped: r.skipped })
+}
+
+#[tauri::command]
 pub fn import_scraper_json(
     db: State<'_, DbState>,
     query: String,

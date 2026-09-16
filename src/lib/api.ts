@@ -122,6 +122,10 @@ export async function deleteSavedFilter(id: number) {
   return invoke("delete_filter", { id });
 }
 
+export async function runScraperSearch(query: string, city: string, radiusKm: number, withEmail = false): Promise<{ job_id: number; imported: number; merged: number; skipped: number }> {
+  return invoke("run_scraper_search_cmd", { query, city, radiusKm, withEmail });
+}
+
 export async function checkScraperBinary(): Promise<{ available: boolean; message: string }> {
   return invoke("check_scraper_binary");
 }

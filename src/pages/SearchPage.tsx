@@ -14,6 +14,7 @@ import {
   importScraperJson,
   pauseJob,
   resumeJob,
+  runScraperSearch,
   searchLeads,
   startAdaptiveSearch,
 } from "../lib/api";
@@ -35,7 +36,9 @@ export default function SearchPage() {
   const [sugestoes, setSugestoes] = useState<{ display_name: string; lat: number; lon: number }[]>([]);
   const [coords, setCoords] = useState<[number, number] | null>(null);
   const [radiusKm, setRadiusKm] = useState(5);
+  const [provider, setProvider] = useState<"scraper" | "places">("scraper");
   const [strategy, setStrategy] = useState<"single" | "adaptive">("adaptive");
+  const [scraperEmail, setScraperEmail] = useState(false);
   const [soSemSite, setSoSemSite] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -88,18 +91,24 @@ export default function SearchPage() {
     setMessage(null);
     setError(null);
     try {
-      const apiKey = await secretStore.getApiKey();
-      if (!apiKey) {
-        setError("Salve sua chave da API do Google Places em Configurações primeiro.");
-        return;
-      }
       await prefs.save({ lastQuery: query, lastCity: city, lastRadius: radiusKm });
-      if (strategy === "single") {
-        const r = await searchLeads({ query, city, radiusKm, apiKey });
-        setMessage(`Busca inicial: ${r.result_count} encontrados, ${r.new_count} novos.`);
+      if (provider === "scraper") {
+        setMessage("Rodando scraper local — pode levar alguns minutos…");
+        const r = await runScraperSearch(query, city, radiusKm, scraperEmail);
+        setMessage(`${r.imported} novos + ${r.merged} unificados (${r.skipped} ignorados). Job #${r.job_id}.`);
       } else {
-        const r = await startAdaptiveSearch({ query, city, radiusKm, apiKey });
-        setMessage(`Cobertura adaptativa concluída. Job #${r.job_id} — veja abaixo.`);
+        const apiKey = await secretStore.getApiKey();
+        if (!apiKey) {
+          setError("Salve sua chave em Configurações primeiro — ou use o Scraper local, que não precisa de chave.");
+          return;
+        }
+        if (strategy === "single") {
+          const r = await searchLeads({ query, city, radiusKm, apiKey });
+          setMessage(`Busca inicial: ${r.result_count} encontrados, ${r.new_count} novos.`);
+        } else {
+          const r = await startAdaptiveSearch({ query, city, radiusKm, apiKey });
+          setMessage(`Cobertura adaptativa concluída. Job #${r.job_id} — veja abaixo.`);
+        }
       }
       await loadJobs();
       await loadResults();
@@ -192,12 +201,27 @@ export default function SearchPage() {
               <input type="range" min={1} max={50} value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} className="w-full accent-green-600" />
             </div>
             <div>
-              <Label>Estratégia</Label>
+              <Label>Fonte dos dados</Label>
               <div className="flex gap-2">
-                <GhostButton onClick={() => setStrategy("single")} className={strategy === "single" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>Simples</GhostButton>
-                <GhostButton onClick={() => setStrategy("adaptive")} className={strategy === "adaptive" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>Adaptativa</GhostButton>
+                <GhostButton onClick={() => setProvider("scraper")} className={provider === "scraper" ? "border-green-700 bg-green-700 text-white hover:bg-green-700" : ""}>Scraper local · sem chave</GhostButton>
+                <GhostButton onClick={() => setProvider("places")} className={provider === "places" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>API Google</GhostButton>
               </div>
             </div>
+            {provider === "places" && (
+              <div>
+                <Label>Estratégia</Label>
+                <div className="flex gap-2">
+                  <GhostButton onClick={() => setStrategy("single")} className={strategy === "single" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>Simples</GhostButton>
+                  <GhostButton onClick={() => setStrategy("adaptive")} className={strategy === "adaptive" ? "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-900" : ""}>Adaptativa</GhostButton>
+                </div>
+              </div>
+            )}
+            {provider === "scraper" && (
+              <label className="flex items-center gap-2 text-sm text-neutral-700">
+                <input type="checkbox" checked={scraperEmail} onChange={(e) => setScraperEmail(e.target.checked)} className="accent-green-600" />
+                Buscar e-mails nos sites (mais lento)
+              </label>
+            )}
             <label className="flex items-center gap-2 text-sm text-neutral-700">
               <input type="checkbox" checked={soSemSite} onChange={(e) => setSoSemSite(e.target.checked)} className="accent-green-600" />
               Somente sem site
@@ -285,9 +309,12 @@ export default function SearchPage() {
         {jobs.length === 0 && <p className="text-sm text-neutral-400">Nenhuma busca ainda.</p>}
       </div>
 
-      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-neutral-500">Google Maps Scraper</h2>
+      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-neutral-500">Scraper local — instalação</h2>
       <Card>
-        <p className="text-xs text-neutral-500">Alternativa à API. Exporte o JSON do gosom/google-maps-scraper e importe aqui. Deduplicação entre provedores por site → telefone → nome+coordenadas.</p>
+        <p className="text-xs text-neutral-500">
+          Para buscar sem chave de API, baixe o <b>google-maps-scraper</b> em github.com/gosom/google-maps-scraper/releases
+          (Windows: o .exe) e deixe no PATH. Sem ele, use Importar JSON abaixo com um arquivo gerado pelo programa.
+        </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <GhostButton onClick={async () => {
             const b = await checkScraperBinary();

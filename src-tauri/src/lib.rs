@@ -58,6 +58,7 @@ pub fn run() {
             commands::messages::set_outreach_status,
             commands::scraper::check_scraper_binary,
             commands::scraper::import_scraper_json,
+            commands::scraper::run_scraper_search_cmd,
             commands::scraper::get_provider_counts,
             commands::crm::get_activity,
             commands::crm::add_note,
