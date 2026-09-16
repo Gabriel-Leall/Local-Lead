@@ -583,27 +583,6 @@ pub fn update_lead_score(
     Ok(())
 }
 
-pub fn bulk_update_status(
-    conn: &Connection,
-    lead_ids: &[i64],
-    status: &str,
-) -> rusqlite::Result<usize> {
-    if lead_ids.is_empty() {
-        return Ok(0);
-    }
-    let placeholders = lead_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql = format!("UPDATE leads SET lead_status=?1, updated_at=?2 WHERE id IN ({placeholders})");
-    let mut stmt = conn.prepare(&sql)?;
-    let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-    args.push(Box::new(status.to_owned()));
-    args.push(Box::new(now()));
-    for id in lead_ids {
-        args.push(Box::new(*id));
-    }
-    let params: Vec<&dyn rusqlite::ToSql> = args.iter().map(|b| b.as_ref()).collect();
-    Ok(stmt.execute(params.as_slice())?)
-}
-
 pub fn get_config(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     Ok(conn
         .query_row("SELECT value FROM app_config WHERE key=?1", params![key], |r| r.get(0))

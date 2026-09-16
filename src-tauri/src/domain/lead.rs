@@ -1,35 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum LeadStatus {
-    New,
-    Qualified,
-    Skipped,
-}
-
-impl LeadStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::New => "new",
-            Self::Qualified => "qualified",
-            Self::Skipped => "skipped",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "qualified" => Self::Qualified,
-            "skipped" => Self::Skipped,
-            _ => Self::New,
-        }
-    }
-
-    pub fn all() -> Vec<String> {
-        vec!["new".into(), "qualified".into(), "skipped".into()]
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lead {
     pub id: i64,

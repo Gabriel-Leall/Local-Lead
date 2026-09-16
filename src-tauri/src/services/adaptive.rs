@@ -1,5 +1,5 @@
 use crate::database::repositories::{
-    aggregate_job_counts, create_adaptive_job, create_cell, get_job_status, list_cells, mark_cell,
+    aggregate_job_counts, create_adaptive_job, create_cell, get_job_status, mark_cell,
     pop_pending_cell, set_job_status, upsert_lead_in_cell,
 };
 use crate::database::DbState;
@@ -163,9 +163,6 @@ pub async fn run_pending_cells(
                     let s = if decision == SplitDecision::Complete { "completed" } else { "saturated" };
                     mark_cell(&conn, cell.id, s, raw, uniq)?;
                 }
-                SplitDecision::Saturated => {
-                    mark_cell(&conn, cell.id, "saturated", raw, uniq)?;
-                }
             }
             aggregate_job_counts(&conn, job_id)?;
         }
@@ -181,9 +178,4 @@ impl ConnExt for rusqlite::Connection {
     fn let_status(&self, job_id: i64) -> rusqlite::Result<String> {
         get_job_status(self, job_id)
     }
-}
-
-pub fn job_progress_cells(db: &DbState, job_id: i64) -> Result<Vec<crate::database::repositories::SearchCell>, AppError> {
-    let guard = lock(db)?;
-    Ok(list_cells(&guard, job_id)?)
 }

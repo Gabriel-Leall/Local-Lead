@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn parses_nominatim_response() {
         let body = r#"[{"lat":"25.7616798","lon":"-80.1917902"}]"#;
-        let (lat, lng) = parse_nominatim(body).unwrap();
+        let (lat, _lng) = parse_nominatim(body).unwrap();
         assert!((lat - 25.76).abs() < 0.01);
     }
 

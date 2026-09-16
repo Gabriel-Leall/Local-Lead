@@ -3,6 +3,9 @@ use super::socials::{extract_facebook, extract_instagram, extract_whatsapp};
 use crate::error::AppError;
 use serde::Serialize;
 
+/// All statuses from ARCHITECTURE §13. `Unknown`/`SocialOnly` are reserved
+/// for future cross-source detection and kept for spec completeness.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WebsiteStatus {

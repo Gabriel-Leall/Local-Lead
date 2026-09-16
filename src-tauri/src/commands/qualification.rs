@@ -1,5 +1,5 @@
 use crate::database::repositories::{
-    bulk_update_status, delete_saved_filter, get_config, list_leads_filtered, list_saved_filters,
+    delete_saved_filter, get_config, list_leads_filtered, list_saved_filters,
     save_filter, set_config, LeadFilters, SavedFilter,
 };
 use crate::database::DbState;

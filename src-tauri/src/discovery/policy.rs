@@ -25,7 +25,6 @@ impl Default for SplitPolicy {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SplitDecision {
     Complete,
-    Saturated,
     Split,
     StopDepth,
     StopSmall,
